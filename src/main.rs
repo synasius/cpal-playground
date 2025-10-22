@@ -1,10 +1,20 @@
 extern crate anyhow;
 extern crate cpal;
 
-use std::time;
+use std::sync::{Arc, Mutex};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{FromSample, Sample, SizedSample, StreamConfig};
+use cpal::{FromSample, SizedSample, StreamConfig};
+
+// import commonly used items from the prelude:
+use rand::prelude::*;
+
+pub enum WaveType {
+    Square = 0,
+    Sawtooth = 1,
+    Sine = 2,
+    Noise = 3,
+}
 
 fn main() -> anyhow::Result<()> {
     let host = cpal::default_host();
@@ -39,26 +49,43 @@ where
     let sample_rate = config.sample_rate.0 as f32;
     let channels = config.channels as usize;
 
-    let mut sample_clock = 0f32;
+    let mut rng = rand::rng();
 
-    // Produce a sinusoid of maximum amplitude.
-    let note = 440.0 * 2.0 * std::f32::consts::PI / sample_rate;
-    let mut next_value = move || {
-        sample_clock = (sample_clock + 1.0) % sample_rate;
-        (sample_clock * note).sin()
-    };
-
-    // Produce a square wave
-    let frequency = 210.0; // this is in Hz
+    let frequency = 310.0;
     let period_speed = frequency / sample_rate;
     let mut period_position = 0.0;
+    let mut noise_buffer: [f32; 32] = [0.0; 32];
+    let wave_type = WaveType::Noise;
+
+    // init the noise buffer
+    for i in 0..32 {
+        noise_buffer[i] = rng.random::<f32>() * 2.0 - 1.0;
+    }
 
     let mut next_value = move || {
         period_position += period_speed;
         if period_position >= 1.0 {
-            period_position -= 1.0
+            period_position -= 1.0;
+            let mut rng = rand::rng();
+            for i in 0..32 {
+                noise_buffer[i] = rng.random::<f32>() * 2.0 - 1.0;
+            }
         }
-        if period_position <= 0.5 { -0.5 } else { 0.5 }
+        match wave_type {
+            // Produce a square wave
+            WaveType::Square => {
+                if period_position <= 0.5 {
+                    -0.5
+                } else {
+                    0.5
+                }
+            }
+            WaveType::Sawtooth => 1.0 - period_position * 2.0,
+            // Produce a sinusoid of maximum amplitude.
+            WaveType::Sine => (period_position * 2.0 * std::f32::consts::PI).sin(),
+            WaveType::Noise => noise_buffer[(period_position * 31.0) as usize],
+            _ => 0.0,
+        }
     };
 
     let stream = device.build_output_stream(
