@@ -1,8 +1,6 @@
 extern crate anyhow;
 extern crate cpal;
 
-use std::sync::{Arc, Mutex};
-
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SizedSample, StreamConfig};
 
@@ -14,6 +12,13 @@ pub enum WaveType {
     Sawtooth = 1,
     Sine = 2,
     Noise = 3,
+}
+
+pub struct Synth {
+    wave_type: WaveType,
+
+    sample_rate: u32,
+    frequency: u32,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -51,9 +56,9 @@ where
 
     let mut rng = rand::rng();
 
-    let frequency = 310.0;
+    let frequency = 440.0;
     let period_speed = frequency / sample_rate;
-    let mut period_position = 0.0;
+    let mut sample_index = 0.0;
     let mut noise_buffer: [f32; 32] = [0.0; 32];
     let wave_type = WaveType::Noise;
 
@@ -63,27 +68,30 @@ where
     }
 
     let mut next_value = move || {
-        period_position += period_speed;
-        if period_position >= 1.0 {
-            period_position -= 1.0;
+        if sample_index > sample_rate {
+            // refresh the noise buffer
             let mut rng = rand::rng();
             for i in 0..32 {
                 noise_buffer[i] = rng.random::<f32>() * 2.0 - 1.0;
             }
         }
+
+        sample_index = (sample_index + 1.0) % sample_rate;
+
+        let position_in_period = sample_index * period_speed;
         match wave_type {
             // Produce a square wave
             WaveType::Square => {
-                if period_position <= 0.5 {
+                if position_in_period <= 0.5 {
                     -0.5
                 } else {
                     0.5
                 }
             }
-            WaveType::Sawtooth => 1.0 - period_position * 2.0,
+            WaveType::Sawtooth => 1.0 - position_in_period * 2.0,
             // Produce a sinusoid of maximum amplitude.
-            WaveType::Sine => (period_position * 2.0 * std::f32::consts::PI).sin(),
-            WaveType::Noise => noise_buffer[(period_position * 31.0) as usize],
+            WaveType::Sine => (position_in_period * 2.0 * std::f32::consts::PI).sin(),
+            WaveType::Noise => noise_buffer[(position_in_period * 31.0) as usize],
             _ => 0.0,
         }
     };
