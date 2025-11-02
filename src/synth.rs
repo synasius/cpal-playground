@@ -9,6 +9,8 @@ pub enum WaveType {
     Noise,
 }
 
+const TWO_PI: f32 = 2.0 * std::f32::consts::PI;
+
 pub struct Synth {
     pub wave_type: WaveType,
     pub sample_rate: f32,
@@ -20,7 +22,7 @@ pub struct Synth {
 impl Synth {
     fn sine_wave(&self, frequency: f32) -> f32 {
         let period = self.sample_index * frequency / self.sample_rate;
-        (period * 2.0 * std::f32::consts::PI).sin()
+        (period * TWO_PI).sin()
     }
 
     fn additive_harmonics(&self, step: f32, exponent: f32) -> f32 {
@@ -74,5 +76,13 @@ impl Synth {
             WaveType::Triangle => self.triangle_wave(),
             WaveType::Noise => self.noise(),
         }
+    }
+
+    pub fn set_frequency(&mut self, frequency: f32) {
+        self.frequency = frequency;
+    }
+
+    pub fn set_wave(&mut self, wave: WaveType) {
+        self.wave_type = wave;
     }
 }
